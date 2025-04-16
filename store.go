@@ -4,15 +4,20 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
 )
 
+const DefaultRootFolderName = "agstore"
+
 type PathTransformFunc func(string) PathKey
 
 type StoreOpts struct {
+	// Root is the folder that contain all the folders/files.
+	Root              string
 	PathTransformFunc PathTransformFunc
 }
 
@@ -40,8 +45,11 @@ func CASPathTransformFunc(key string) PathKey {
 	}
 }
 
-var DefaultPathTransformFunc = func(key string) string {
-	return key
+var DefaultPathTransformFunc = func(key string) PathKey {
+	return PathKey{
+		PathName: key,
+		FileName: key,
+	}
 }
 
 type Store struct {
@@ -49,6 +57,15 @@ type Store struct {
 }
 
 func NewStore(opts StoreOpts) *Store {
+
+	if opts.PathTransformFunc == nil {
+		opts.PathTransformFunc = DefaultPathTransformFunc
+	}
+
+	if len(opts.Root) == 0 {
+		opts.Root = DefaultRootFolderName
+	}
+
 	return &Store{
 		StoreOpts: opts,
 	}
@@ -69,19 +86,32 @@ func (s *Store) Read(key string) (io.Reader, error) {
 
 func (s *Store) readStream(key string) (io.ReadCloser, error) {
 	fileKey := s.PathTransformFunc(key)
-	fullPath := fileKey.PathName + "/" + fileKey.FileName
+	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, fileKey.PathName)
+	fullPath := pathNameWithRoot + "/" + fileKey.FileName
 	return os.Open(fullPath)
+}
+
+func (s *Store) Delete(key string) error {
+	pathKey := s.PathTransformFunc(key)
+	firstFolder := strings.Split(pathKey.PathName, "/")[0]
+	firstFolderNameWithRoot := fmt.Sprintf("%s/%s", s.Root, firstFolder)
+	defer func() {
+		log.Printf("deleted %s from disk", pathKey.FileName)
+	}()
+	fmt.Println(firstFolderNameWithRoot)
+	return os.RemoveAll(firstFolderNameWithRoot)
 }
 
 func (s *Store) writeStream(key string, r io.Reader) error {
 	pathKey := s.PathTransformFunc(key)
+	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.PathName)
 
-	if err := os.MkdirAll(pathKey.PathName, os.ModePerm); err != nil {
+	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil {
 		return err
 	}
 
 	fileName := pathKey.FileName
-	fullPathName := pathKey.PathName + "/" + fileName
+	fullPathName := pathNameWithRoot + "/" + fileName
 
 	f, err := os.Create(fullPathName)
 	if err != nil {
