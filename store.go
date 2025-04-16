@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"io"
@@ -17,7 +18,7 @@ type StoreOpts struct {
 
 type PathKey struct {
 	PathName string
-	Original string
+	FileName string
 }
 
 func CASPathTransformFunc(key string) PathKey {
@@ -35,7 +36,7 @@ func CASPathTransformFunc(key string) PathKey {
 
 	return PathKey{
 		PathName: strings.Join(paths, "/"),
-		Original: hashStr,
+		FileName: hashStr,
 	}
 }
 
@@ -53,6 +54,25 @@ func NewStore(opts StoreOpts) *Store {
 	}
 }
 
+func (s *Store) Read(key string) (io.Reader, error) {
+	f, err := s.readStream(key)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, f)
+
+	return buf, err
+}
+
+func (s *Store) readStream(key string) (io.ReadCloser, error) {
+	fileKey := s.PathTransformFunc(key)
+	fullPath := fileKey.PathName + "/" + fileKey.FileName
+	return os.Open(fullPath)
+}
+
 func (s *Store) writeStream(key string, r io.Reader) error {
 	pathKey := s.PathTransformFunc(key)
 
@@ -60,7 +80,7 @@ func (s *Store) writeStream(key string, r io.Reader) error {
 		return err
 	}
 
-	fileName := pathKey.Original
+	fileName := pathKey.FileName
 	fullPathName := pathKey.PathName + "/" + fileName
 
 	f, err := os.Create(fullPathName)
