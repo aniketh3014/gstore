@@ -1,35 +1,36 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"time"
 
 	"github.com/aniketh3014/distributed-file-storage/p2p"
 )
 
-func onPeer(p p2p.Peer) error {
-	p.Close()
-	return nil
-}
 func main() {
-	tcpOpts := p2p.TCPTransportOpts{
+
+	tcpTransportOpts := p2p.TCPTransportOpts{
 		ListenAddr: ":4000",
 		Shakehands: p2p.NOPHandshakeFunc,
 		Decoder:    p2p.DefaultDecoder{},
-		OnPeer:     onPeer,
+		//TODO: OnPeer
 	}
 
-	tr := p2p.NewTCPTransport(tcpOpts)
+	tcpTransport := p2p.NewTCPTransport(tcpTransportOpts)
 
-	if err := tr.ListenAndAccept(); err != nil {
-		log.Fatal(err)
+	fileServerOpts := FileServerOpts{
+		StorageRoot:       "4000_network",
+		PathTransformFunc: CASPathTransformFunc,
+		Transport:         tcpTransport,
 	}
+	s := NewFileServer(fileServerOpts)
 
 	go func() {
-		for {
-			msg := <-tr.Consume()
-			fmt.Printf("%+v\n", msg)
-		}
+		time.Sleep(time.Second * 3)
+		s.Stop()
 	}()
-	select {}
+
+	if err := s.Start(); err != nil {
+		log.Fatal(err)
+	}
 }
