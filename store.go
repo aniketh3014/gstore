@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -54,6 +55,15 @@ var DefaultPathTransformFunc = func(key string) PathKey {
 
 type Store struct {
 	StoreOpts
+}
+
+func (s *Store) Has(key string) bool {
+	fileKey := s.PathTransformFunc(key)
+	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, fileKey.PathName)
+	fullPath := pathNameWithRoot + "/" + fileKey.FileName
+
+	_, err := os.Stat(fullPath)
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func NewStore(opts StoreOpts) *Store {
@@ -136,7 +146,6 @@ func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("written (%d) bytes to disk: %s", n, fullPathName)
 
 	return n, nil
 }
