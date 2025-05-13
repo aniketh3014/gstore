@@ -18,6 +18,17 @@ func (dec GOBDecoder) Decode(r io.Reader, msg *RPC) error {
 type DefaultDecoder struct{}
 
 func (dec DefaultDecoder) Decode(r io.Reader, msg *RPC) error {
+	peekBuff := make([]byte, 1)
+	if _, err := r.Read(peekBuff); err != nil {
+		return err
+	}
+
+	stream := peekBuff[0] == IncomingStream
+	if stream {
+		msg.Stream = true
+		return nil
+	}
+
 	buf := make([]byte, 2048)
 	n, err := r.Read(buf)
 	if err != nil {

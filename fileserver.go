@@ -78,6 +78,7 @@ func (s *FileServer) broadcast(msg *Message) error {
 		return err
 	}
 	for _, peer := range s.peers {
+		peer.Send([]byte{p2p.IncomingMessage})
 		if err := peer.Send(buf.Bytes()); err != nil {
 			return err
 		}
@@ -105,6 +106,16 @@ func (s *FileServer) GetData(key string) (io.Reader, error) {
 		return nil, err
 	}
 
+	for _, peer := range s.peers {
+		filebuf := new(bytes.Buffer)
+		n, err := io.Copy(filebuf, peer)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Printf("recived %d bytes from %s", n, peer.RemoteAddr().String())
+	}
+
 	select {}
 	return nil, nil
 }
@@ -130,14 +141,15 @@ func (s *FileServer) StoreData(key string, r io.Reader) error {
 		return err
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Millisecond * 2)
 
 	for _, peer := range s.peers {
+		peer.Send([]byte{p2p.IncomingStream})
 		n, err := io.Copy(peer, fileBuf)
 		if err != nil {
 			return nil
 		}
-		fmt.Printf("received and written bytes to disk :", n)
+		fmt.Printf("received and written bytes to disk: %d\n", n)
 	}
 
 	return nil
@@ -175,7 +187,7 @@ func (s *FileServer) bootstarpNetwork() error {
 
 func (s *FileServer) loop() {
 	defer func() {
-		log.Println("stopping file server due to user quit signal")
+		log.Println("stopping file server due to error or user quit signal")
 		s.Transport.Close()
 	}()
 
@@ -185,11 +197,9 @@ func (s *FileServer) loop() {
 			var msg Message
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Println(err)
-				return
 			}
 			if err := s.handleMessage(rpc.From.String(), &msg); err != nil {
 				log.Println(err)
-				return
 			}
 		case <-s.quitch:
 			return
@@ -208,7 +218,26 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 }
 
 func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
-	fmt.Println("need to fetch the file from the network")
+	if !s.store.Has(msg.Key) {
+		return fmt.Errorf("file (%s) is not not found on disk", msg.Key)
+	}
+
+	r, err := s.store.Read(msg.Key)
+	if err != nil {
+		return err
+	}
+
+	peer, ok := s.peers[from]
+	if !ok {
+		return fmt.Errorf("peer(%s) not found\n", from)
+	}
+
+	n, err := io.Copy(peer, r)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("sent %d bytes over the network to: %s \n", n, from)
 
 	return nil
 }
@@ -224,9 +253,9 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 		return err
 	}
 
-	log.Printf("written (%d) bytes to disk\n", n)
+	log.Printf("[%s] written %d bytes to disk\n", s.Transport.Addr(), n)
 
-	peer.(*p2p.TCPPeer).Wg.Done()
+	peer.CloseStream()
 
 	return nil
 }
