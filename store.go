@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
@@ -67,7 +66,6 @@ func (s *Store) Has(key string) bool {
 }
 
 func NewStore(opts StoreOpts) *Store {
-
 	if opts.PathTransformFunc == nil {
 		opts.PathTransformFunc = DefaultPathTransformFunc
 	}
@@ -81,17 +79,8 @@ func NewStore(opts StoreOpts) *Store {
 	}
 }
 
-func (s *Store) Read(key string) (io.Reader, error) {
-	f, err := s.readStream(key)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, f)
-
-	return buf, err
+func (s *Store) Read(key string) (int64, io.ReadCloser, error) {
+	return s.readStream(key)
 }
 
 func (s *Store) Write(key string, r io.Reader) (int64, error) {
@@ -103,11 +92,21 @@ func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return n, nil
 }
 
-func (s *Store) readStream(key string) (io.ReadCloser, error) {
+func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	fileKey := s.PathTransformFunc(key)
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, fileKey.PathName)
 	fullPath := pathNameWithRoot + "/" + fileKey.FileName
-	return os.Open(fullPath)
+	file, err := os.Open(fullPath)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	f, err := file.Stat()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return f.Size(), file, nil
 }
 
 func (s *Store) Delete(key string) error {

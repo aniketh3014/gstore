@@ -59,7 +59,7 @@ func main() {
 	// }
 	// time.Sleep(time.Millisecond * 5)
 
-	r, err := s2.GetData("myprivatekey")
+	_, r, err := s2.GetData("myprivatekey")
 	if err != nil {
 		log.Fatal(err)
 	}
