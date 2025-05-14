@@ -92,10 +92,11 @@ type MessageGetFile struct {
 
 func (s *FileServer) GetData(key string) (io.Reader, error) {
 	if s.store.Has(key) {
+		fmt.Printf("[%s] serving file(%s) from local disk\n", s.Transport.Addr(), key)
 		return s.store.Read(key)
 	}
 
-	fmt.Printf("file(%s) not found loacally, fetching from network\n", key)
+	fmt.Printf("[%s]file(%s) not found loacally, fetching from network\n", s.Transport.Addr(), key)
 	msg := Message{
 		Payload: MessageGetFile{
 			Key: key,
@@ -106,18 +107,19 @@ func (s *FileServer) GetData(key string) (io.Reader, error) {
 		return nil, err
 	}
 
+	time.Sleep(time.Millisecond * 500)
+
 	for _, peer := range s.peers {
-		filebuf := new(bytes.Buffer)
-		n, err := io.Copy(filebuf, peer)
+		n, err := s.store.Write(key, io.LimitReader(peer, 24))
 		if err != nil {
 			return nil, err
 		}
 
-		fmt.Printf("recived %d bytes from %s", n, peer.RemoteAddr().String())
+		fmt.Printf("[%s]recived %d bytes from %s\n", s.Transport.Addr(), n, peer.RemoteAddr().String())
+		peer.CloseStream()
 	}
 
-	select {}
-	return nil, nil
+	return s.store.Read(key)
 }
 
 func (s *FileServer) StoreData(key string, r io.Reader) error {
@@ -219,9 +221,10 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 
 func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
 	if !s.store.Has(msg.Key) {
-		return fmt.Errorf("file (%s) is not not found on disk", msg.Key)
+		return fmt.Errorf("[%s] file (%s) is not not found on disk", s.Transport.Addr(), msg.Key)
 	}
 
+	fmt.Printf("[%s] serving file (%s) over the network\n", s.Transport.Addr(), msg.Key)
 	r, err := s.store.Read(msg.Key)
 	if err != nil {
 		return err
@@ -232,12 +235,14 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 		return fmt.Errorf("peer(%s) not found\n", from)
 	}
 
+	peer.Send([]byte{p2p.IncomingStream})
+
 	n, err := io.Copy(peer, r)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("sent %d bytes over the network to: %s \n", n, from)
+	fmt.Printf("[%s] sent %d bytes over the network to: %s \n", s.Transport.Addr(), n, from)
 
 	return nil
 }

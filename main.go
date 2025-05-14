@@ -1,10 +1,7 @@
 package main
 
 import (
-	// "bytes"
-	// "bytes"
 	"fmt"
-	// "fmt"
 	"io"
 	"log"
 	"time"
@@ -13,12 +10,11 @@ import (
 )
 
 func makeServer(listenAddr string, root string, nodes ...string) *FileServer {
-
 	tcpTransportOpts := p2p.TCPTransportOpts{
 		ListenAddr: listenAddr,
 		Shakehands: p2p.NOPHandshakeFunc,
 		Decoder:    p2p.DefaultDecoder{},
-		//TODO: OnPeer
+		// TODO: OnPeer
 	}
 
 	tcpTransport := p2p.NewTCPTransport(tcpTransportOpts)
@@ -35,7 +31,6 @@ func makeServer(listenAddr string, root string, nodes ...string) *FileServer {
 	tcpTransport.OnPeer = s.OnPeer
 
 	return s
-
 }
 
 func main() {
@@ -56,17 +51,15 @@ func main() {
 	}()
 	time.Sleep(time.Second * 2)
 	//
-	// for i := 0; i < 3; i++ {
-	// 	data := bytes.NewReader([]byte("this is a big data file!"))
+	// data := bytes.NewReader([]byte("this is a big data file!"))
 	//
-	// 	err := s2.StoreData(fmt.Sprintf("myprivatekey_%d", i), data)
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	time.Sleep(time.Millisecond * 5)
+	// err := s2.StoreData(fmt.Sprintf("myprivatekey"), data)
+	// if err != nil {
+	// 	log.Fatal(err)
 	// }
+	// time.Sleep(time.Millisecond * 5)
 
-	r, err := s2.GetData("myprivatekey_1")
+	r, err := s2.GetData("myprivatekey")
 	if err != nil {
 		log.Fatal(err)
 	}
